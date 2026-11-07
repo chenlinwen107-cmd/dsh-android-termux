@@ -1,7 +1,11 @@
 const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
-const koffi = require("koffi");
+const { createRequire } = require("node:module");
+
+// Resolve Koffi from the Harness installation root (the current directory).
+const harnessRequire = createRequire(path.join(process.cwd(), "package.json"));
+const koffi = harnessRequire("koffi");
 
 const AT_FDCWD = -100;
 const RENAME_NOREPLACE = 1;

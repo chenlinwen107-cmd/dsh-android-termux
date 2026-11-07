@@ -1,0 +1,67 @@
+--- a/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
++++ b/node_modules/@deepseek-ai/dsh-session-persistence-jsonl/lib/index.js
+@@ -2,6 +2,8 @@
+ import { SessionFormatUnsupportedMigrationError, createSessionFormatCatalogWithChildren, historicalSessionFormatCatalog, sessionFormatCatalog } from "@deepseek-ai/dsh-session-format-catalog";
+ import { readdirSync } from "node:fs";
+ import { link, lstat, mkdir, mkdtemp, open, readFile, readdir, realpath, rm, stat, truncate } from "node:fs/promises";
++import { createRequire } from "node:module";
++import { getSystemErrorName } from "node:util";
+ import { basename, dirname, isAbsolute, join, parse, resolve, toNamespacedPath } from "node:path";
+ import { performance } from "node:perf_hooks";
+ import { scheduler } from "node:timers/promises";
+@@ -2025,6 +2027,29 @@
+                await internals.fs.rm(path);
+        } catch {}
+ }
++const androidRequire = createRequire(import.meta.url);
++let androidRenameat2;
++function publishNewFileAndroid(source, destination) {
++       if (androidRenameat2 === void 0) {
++               const koffi = androidRequire("koffi");
++               const libc = koffi.load("/system/lib64/libc.so");
++               androidRenameat2 = {
++                       renameat2: libc.func("int renameat2(int, const char *, int, const char *, unsigned int)"),
++                       koffi
++               };
++       }
++       const result = androidRenameat2.renameat2(-100, source, -100, destination, 1);
++       if (result === 0) return;
++       const errno = androidRenameat2.koffi.errno();
++       const code = getSystemErrorName(-errno);
++       const error = new Error(`${code}: renameat2 '${source}' -> '${destination}'`);
++       error.code = code;
++       error.errno = -errno;
++       error.syscall = "renameat2";
++       error.path = source;
++       error.dest = destination;
++       throw error;
++}
+ async function publishCurrentExclusive(staged, currentPath, internals) {
+        if (internals.platform === "win32") try {
+                await internals.publishNewWin32(staged, currentPath);
+@@ -2036,7 +2061,11 @@
+                throw error;
+        }
+        try {
+-               await internals.fs.link(staged, currentPath);
++               if (internals.platform === "android") {
++                       publishNewFileAndroid(staged, currentPath);
++               } else {
++                       await internals.fs.link(staged, currentPath);
++               }
+        } catch (error) {
+                /* v8 ignore else -- a non-collision filesystem error propagates unchanged. */
+                if (isEEXIST(error)) return false;
+@@ -3231,7 +3260,11 @@
+                const tmp = await this.writeSyncedTempFile(finalPath, content);
+                let linked = false;
+                try {
+-                       await link(tmp, finalPath);
++                       if (process.platform === "android") {
++                               publishNewFileAndroid(tmp, finalPath);
++                       } else {
++                               await link(tmp, finalPath);
++                       }
+                        linked = true;
+                } finally {
+                        /* v8 ignore next -- link failure is the TOCTOU/IO race guarded above; not reachable in test */

@@ -7,8 +7,12 @@ The tested Harness dependency tree contained these native addons:
 - `koffi` Android ARM64 addon
 - `node-pty` addon
 
-In the tested environment, the first three addons loaded successfully. The `node-pty` JavaScript entry point could be required, but a full PTY spawn/interaction test was not completed. Do not interpret module loading as proof that every native feature works.
+In the tested environment:
 
-The session persistence compatibility patch uses the already-declared `koffi` dependency to call Android libc. It does not add a new npm dependency.
+- The first three addons loaded successfully.
+- `node-pty` was tested beyond module loading: process spawn, output capture, interactive input, terminal resize, and Ctrl+C interruption all worked in the recorded tests.
+- The session-persistence experiment used the already-present `koffi` dependency to call Android libc.
 
-Native addon compatibility depends on the Android ABI, Node.js ABI/N-API level, package build artifacts, and the specific feature being used.
+These results apply only to the specific installed artifacts and runtime that were tested. They do not establish that a fresh npm installation on another device will obtain compatible binaries, nor that every feature of these packages works.
+
+Native addon compatibility depends on the Android ABI, Node.js ABI/N-API level, package build artifacts, and the specific feature being used. The repository does not provide a complete, reproducible native-module build or distribution process.

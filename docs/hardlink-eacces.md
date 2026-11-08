@@ -1,26 +1,35 @@
-# Hard-link publication failure on the tested Termux environment
+# Hard-link publication failure in the tested Termux environment
 
-The original session persistence implementation publishes staged files with filesystem hard links.
+A minimal Node.js `fs.link()` test in the tested Termux HOME returned `EACCES`. The Harness session-persistence code encountered the same error while publishing a session file.
 
-In the tested Termux HOME directory, a minimal Node.js `fs.link()` test returned `EACCES`. The same failure occurred when the Harness attempted to publish a session file. This establishes the behavior in that tested environment; it should not be generalized to every Android filesystem or every Termux installation.
+This is an observation from one environment and filesystem location. It must not be generalized to every Android filesystem, shared-storage mount, Termux installation, or Android release.
 
-## Compatibility approach
+## Session-persistence experiment
 
-On Android only, the patch uses:
+The local experiment used Android libc:
 
-- Android libc: `/system/lib64/libc.so`
+- Library: `/system/lib64/libc.so`
 - Function: `renameat2`
 - Directory descriptor: `AT_FDCWD` (`-100`)
 - Flag: `RENAME_NOREPLACE` (`1`)
 
-This provides an atomic rename that refuses to replace an existing destination. In the tested environment:
+A focused test showed that, in the tested location, publishing to a new destination succeeded and attempting to publish over an existing destination returned `EEXIST` without overwriting it.
 
-- Publishing to a new destination succeeded.
-- Publishing when the destination already existed failed with `EEXIST`.
-- The existing destination was not overwritten.
+A local modification of the session-persistence package then allowed a real Harness Web session to be restarted with previous history still available.
 
-The non-Android code paths remain unchanged.
+**Important:** the patch checked into this repository has a known whitespace/application problem and is retained for historical inspection only. It is not a supported, ready-to-apply fix. See the repository README.
 
-## Important limitations
+## Attachment persistence is a separate unresolved problem
 
-This patch is specific to the tested Android/Bionic environment. It assumes the libc exports `renameat2`, that the syscall is permitted by the app's execution policy, and that the source and destination are on a filesystem where the operation is supported. It is not a general replacement for all hard-link semantics on all platforms.
+The attachment package also uses hard links, but its call sites do not all have the same semantics:
+
+- A staged temporary object may be published by moving it to its final name, provided no-clobber behavior and cleanup are preserved.
+- An immutable content-addressed object may be the source for multiple aliases. Its source must remain available after an alias is created.
+
+A direct `renameat2` replacement at the alias call site would move the source object and could break later aliases. Copy-and-publish approaches introduce different storage, atomicity, and cleanup trade-offs.
+
+No complete attachment-persistence adaptation or end-to-end attachment test is provided by this repository.
+
+## General limitation
+
+`renameat2(RENAME_NOREPLACE)` is not a universal replacement for hard links. Whether it is appropriate depends on the exact source lifetime, destination collision behavior, filesystem, and failure-cleanup semantics of each call site.
